@@ -13,12 +13,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      # Honestly optional, but fine, keep it
-      - name: Enable Windows Long Paths
-        shell: pwsh
-        run: git config --global core.longpaths true
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:

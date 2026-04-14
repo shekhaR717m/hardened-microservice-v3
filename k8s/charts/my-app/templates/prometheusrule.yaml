@@ -1,0 +1,46 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-alerts
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: {{ .Release.Name }}.rules
+      rules:
+        - alert: HighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{status=~"5..", job="{{ .Release.Name }}"}[5m]))
+              /
+              sum(rate(http_requests_total{job="{{ .Release.Name }}"}[5m]))
+            ) * 100 > 5
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Error rate exceeds 5%"
+            description: "{{ .Release.Name }} error rate is {{ "{{ $value }}" }}%"
+
+        - alert: HighP95Latency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="{{ .Release.Name }}"}[5m])) by (le)
+            ) > 0.5
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "p95 latency exceeds 500ms"
+            description: "{{ .Release.Name }} p95 latency is {{ "{{ $value }}" }}s"
+
+        - alert: PodRestartLoop
+          expr: increase(kube_pod_container_status_restarts_total{pod=~"{{ .Release.Name }}.*"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod restart loop detected"
+            description: "Pod {{ "{{ $labels.pod }}" }} has restarted {{ "{{ $value }}" }} times in 15m"
+{{- end }}

@@ -1,0 +1,49 @@
+replicaCount: 2
+
+image:
+  repository: my-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+dashboard:
+  image:
+    repository: my-dashboard
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8000
+
+config:
+  appVersion: "3.0.0"
+  appEnv: "production"
+  logLevel: "INFO"
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+monitoring:
+  enabled: true
+  interval: 15s
+
+networkPolicy:
+  enabled: true

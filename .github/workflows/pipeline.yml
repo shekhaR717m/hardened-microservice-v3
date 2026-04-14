@@ -1,0 +1,80 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: 🔍 Lint
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install flake8 black
+      - run: flake8 app/ --max-line-length=120
+      - run: black app/ --check
+
+  security-scan:
+    name: 🛡️ Security Scan
+    needs: lint
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t my-app:${{ github.sha }} .
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: my-app:${{ github.sha }}
+          format: table
+          exit-code: 1
+          severity: CRITICAL
+          ignore-unfixed: true
+
+  build-dashboard:
+    name: 🖥️ Build Dashboard
+    needs: lint
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build dashboard image
+        run: docker build -t my-dashboard:${{ github.sha }} ./dashboard
+      - name: Verify image size
+        run: |
+          SIZE=$(docker image inspect my-dashboard:${{ github.sha }} --format='{{.Size}}')
+          SIZE_MB=$((SIZE / 1048576))
+          echo "Dashboard image size: ${SIZE_MB}MB"
+          if [ $SIZE_MB -gt 50 ]; then
+            echo "❌ Image exceeds 50MB limit!"
+            exit 1
+          fi
+          echo "✅ Image within size budget"
+
+  deploy:
+    name: 🚀 Deploy to K3s
+    needs: [security-scan, build-dashboard]
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import images to K3s
+        run: |
+          docker save my-app:${{ github.sha }} | sudo k3s ctr images import -
+          docker save my-dashboard:${{ github.sha }} | sudo k3s ctr images import -
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install my-app ./k8s/charts/my-app \
+            --set image.repository=my-app \
+            --set image.tag=${{ github.sha }} \
+            --set dashboard.image.repository=my-dashboard \
+            --set dashboard.image.tag=${{ github.sha }} \
+            --wait --timeout=120s
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/my-app --timeout=60s
+          kubectl rollout status deployment/my-app-dashboard --timeout=60s

@@ -1,0 +1,116 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: 🔍 Lint
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Windows Long Paths
+        shell: pwsh
+        run: git config --system core.longpaths true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black
+
+      - name: Run Flake8
+        shell: pwsh
+        run: flake8 app/ --max-line-length=120
+
+      - name: Run Black Check
+        shell: pwsh
+        run: black app/ --check
+
+  security-scan:
+    name: 🛡️ Security Scan
+    needs: lint
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        shell: pwsh
+        run: docker build -t my-app:${{ github.sha }} .
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: my-app:${{ github.sha }}
+          format: table
+          exit-code: 1
+          severity: CRITICAL
+          ignore-unfixed: true
+
+  build-dashboard:
+    name: 🖥️ Build Dashboard
+    needs: lint
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build dashboard image
+        shell: pwsh
+        run: docker build -t my-dashboard:${{ github.sha }} ./dashboard
+
+      - name: Verify image size
+        shell: pwsh
+        run: |
+          $size = docker image inspect my-dashboard:${{ github.sha }} --format='{{.Size}}'
+          $sizeMB = [int]($size / 1MB)
+          Write-Output "Dashboard image size: ${sizeMB}MB"
+
+          if ($sizeMB -gt 50) {
+            Write-Output "❌ Image exceeds 50MB limit!"
+            exit 1
+          }
+
+          Write-Output "✅ Image within size budget"
+
+  deploy:
+    name: 🚀 Deploy to K3s
+    needs: [security-scan, build-dashboard]
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import images to K3s
+        shell: pwsh
+        run: |
+          docker save my-app:${{ github.sha }} | wsl sudo k3s ctr images import -
+          docker save my-dashboard:${{ github.sha }} | wsl sudo k3s ctr images import -
+
+      - name: Deploy with Helm
+        shell: pwsh
+        run: |
+          wsl helm upgrade --install my-app ./k8s/charts/my-app `
+            --set image.repository=my-app `
+            --set image.tag=${{ github.sha }} `
+            --set dashboard.image.repository=my-dashboard `
+            --set dashboard.image.tag=${{ github.sha }} `
+            --wait --timeout=120s
+
+      - name: Verify deployment
+        shell: pwsh
+        run: |
+          wsl kubectl rollout status deployment/my-app --timeout=60s
+          wsl kubectl rollout status deployment/my-app-dashboard --timeout=60s

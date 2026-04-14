@@ -14,9 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Honestly optional, but fine, keep it
       - name: Enable Windows Long Paths
         shell: pwsh
-        run: git config --system core.longpaths true
+        run: git config --global core.longpaths true
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -75,14 +76,15 @@ jobs:
         run: |
           $size = docker image inspect my-dashboard:${{ github.sha }} --format='{{.Size}}'
           $sizeMB = [int]($size / 1MB)
-          Write-Output "Dashboard image size: ${sizeMB}MB"
+
+          Write-Output "Dashboard image size: $sizeMB MB"
 
           if ($sizeMB -gt 50) {
-            Write-Output "❌ Image exceeds 50MB limit!"
+            Write-Output "Image exceeds 50MB limit!"
             exit 1
           }
 
-          Write-Output "✅ Image within size budget"
+          Write-Output "Image within size budget"
 
   deploy:
     name: 🚀 Deploy to K3s

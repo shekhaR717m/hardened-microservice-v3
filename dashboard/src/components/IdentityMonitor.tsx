@@ -1,31 +1,42 @@
 import React from 'react';
+import { Contact, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useK8sApi } from '../hooks/useK8sApi';
 
-interface IdentityData { uid: number; gid: number; user: string; }
+interface IdentityData {
+  uid: number;
+  gid: number;
+  user: string;
+}
 
 const IdentityMonitor: React.FC = () => {
   const { data, error, loading } = useK8sApi<IdentityData>('/security/identity', 15000);
-  const isNonRoot = data ? data.uid === 1000 : false;
+  const isNonRoot = data ? data.uid === 1000 && data.gid === 1000 : false;
+  const StatusIcon = isNonRoot ? ShieldCheck : ShieldAlert;
 
   return (
     <div className="rounded-xl border border-armor-700 bg-armor-900 p-6">
-      <h2 className="text-lg font-semibold tracking-tight mb-4">🪪 Identity Monitor</h2>
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight">
+        <Contact className="h-5 w-5 text-cyan-300" />
+        Identity Monitor
+      </h2>
 
-      {loading && <p className="text-armor-200/50 animate-pulse">Checking process identity…</p>}
+      {loading && <p className="text-armor-200/50 animate-pulse">Checking process identity...</p>}
       {error && <p className="text-threat-500 text-sm">{error}</p>}
 
       {data && (
         <div className="space-y-4">
-          <div className={`flex items-center gap-3 rounded-lg p-4 ${
-            isNonRoot ? 'bg-shield-900/30 border border-shield-700' : 'bg-threat-900/30 border border-threat-700'
-          }`}>
-            <span className="text-3xl">{isNonRoot ? '✅' : '🚨'}</span>
+          <div
+            className={`flex items-center gap-3 rounded-lg p-4 ${
+              isNonRoot ? 'bg-shield-900/30 border border-shield-700' : 'bg-threat-900/30 border border-threat-700'
+            }`}
+          >
+            <StatusIcon className={`h-8 w-8 ${isNonRoot ? 'text-shield-500' : 'text-threat-500'}`} />
             <div>
               <p className={`font-bold ${isNonRoot ? 'text-shield-500' : 'text-threat-500'}`}>
-                {isNonRoot ? 'Non-Root — Secure' : 'Running as Root — SECURITY RISK'}
+                {isNonRoot ? 'Non-Root - Secure' : 'Running as Root - Security Risk'}
               </p>
               <p className="text-sm text-armor-200/70">
-                UID:{data.uid} GID:{data.gid} User:{data.user}
+                UID: {data.uid} GID: {data.gid} User: {data.user}
               </p>
             </div>
           </div>
@@ -38,9 +49,13 @@ const IdentityMonitor: React.FC = () => {
             ].map((item) => (
               <div key={item.label} className="rounded-lg bg-armor-800 p-3">
                 <p className="text-xs text-armor-200/60">{item.label}</p>
-                <p className={`font-mono font-bold text-lg ${
-                  item.value === item.expected ? 'text-shield-500' : 'text-threat-500'
-                }`}>{item.value}</p>
+                <p
+                  className={`font-mono text-lg font-bold ${
+                    item.value === item.expected ? 'text-shield-500' : 'text-threat-500'
+                  }`}
+                >
+                  {item.value}
+                </p>
               </div>
             ))}
           </div>

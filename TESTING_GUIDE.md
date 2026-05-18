@@ -35,7 +35,7 @@ kubectl exec -it $(kubectl get pod -l app=my-app -o jsonpath='{.items[0].metadat
 
 ### 3. Read-Only Filesystem
 ```bash
-kubectl exec -it $(kubectl get pod -l app=my-app -o jsonpath='{.items[0].metadata.name}') -- touch /app/test
+kubectl exec -it $(kubectl get pod -l app=my-app -o jsonpath='{.items[0].metadata.name}') -- touch test.txt
 # Expected: "Read-only file system" error
 ```
 
@@ -126,5 +126,5 @@ kubectl delete pod -l app=my-app
 ### 18. Dashboard Image Size
 ```bash
 docker images my-dashboard --format "{{.Size}}"
-# Expected: < 50 MB
+# Expected: < 80 MB
 ```

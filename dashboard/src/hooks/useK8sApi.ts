@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface K8sState<T> {
   data: T | null;
@@ -10,25 +10,31 @@ interface K8sState<T> {
 const API_BASE = '/api';
 
 export function useK8sApi<T>(endpoint: string, intervalMs = 10000): K8sState<T> & { refetch: () => void } {
-  const [state, setState] = useState<K8sState<T>>({ data: null, loading: true, error: null, lastUpdated: null });
+  const [state, setState] = useState<K8sState<T>>({
+    data: null,
+    loading: true,
+    error: null,
+    lastUpdated: null,
+  });
   const backoffRef = useRef(intervalMs);
 
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}${endpoint}`);
       if (!res.ok) {
-        if (res.status === 0 || res.status >= 500) {
-          throw new Error(`K3s API unreachable (port 6443) — Connection Refused`);
-        }
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const details = endpoint.includes('identity')
+          ? 'Identity endpoint is missing on the deployed backend. Redeploy the latest app image.'
+          : res.statusText;
+        throw new Error(`HTTP ${res.status}: ${details}`);
       }
+
       const json = await res.json();
       setState({ data: json as T, loading: false, error: null, lastUpdated: new Date() });
-      backoffRef.current = intervalMs; // reset backoff on success
+      backoffRef.current = intervalMs;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      setState(prev => ({ ...prev, loading: false, error: message }));
-      backoffRef.current = Math.min(backoffRef.current * 2, 60000); // exponential backoff max 60s
+      setState((prev) => ({ ...prev, loading: false, error: message }));
+      backoffRef.current = Math.min(backoffRef.current * 2, 60000);
     }
   }, [endpoint, intervalMs]);
 

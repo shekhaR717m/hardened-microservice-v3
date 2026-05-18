@@ -1,22 +1,17 @@
-"""
-Hardened FastAPI Microservice
-- Structured JSON logging
-- Graceful SIGTERM shutdown
-- Health & Metrics endpoints
-"""
+import asyncio
+import getpass
+import logging
 import os
 import signal
-import asyncio
-import logging
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pythonjsonlogger import jsonlogger
 from prometheus_fastapi_instrumentator import Instrumentator
+from pythonjsonlogger import jsonlogger
 
-# ── Structured JSON Logging ──────────────────────────────────────────
+# Structured JSON logging
 logger = logging.getLogger("app")
 logger.setLevel(logging.INFO)
 
@@ -28,14 +23,17 @@ formatter = jsonlogger.JsonFormatter(
 handler.setFormatter(formatter)
 logger.handlers = [handler]
 
-# ── Graceful Shutdown ────────────────────────────────────────────────
+# Graceful shutdown
 shutdown_event = asyncio.Event()
+
 
 def _handle_sigterm(*_):
     logger.info("SIGTERM received, starting graceful shutdown")
     shutdown_event.set()
 
+
 signal.signal(signal.SIGTERM, _handle_sigterm)
+
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -47,11 +45,11 @@ async def lifespan(application: FastAPI):
         },
     )
     yield
-    logger.info("Draining in-flight connections…")
+    logger.info("Draining in-flight connections...")
     await asyncio.sleep(5)  # let K8s remove from service endpoints
     logger.info("Shutdown complete")
 
-# ── FastAPI App ──────────────────────────────────────────────────────
+
 app = FastAPI(title="Hardened Microservice", version="3.0.0", lifespan=lifespan)
 
 app.add_middleware(
@@ -61,10 +59,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Prometheus metrics instrumentation
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
-# ── Middleware: request logging ──────────────────────────────────────
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
@@ -81,7 +78,7 @@ async def log_requests(request: Request, call_next):
     )
     return response
 
-# ── Endpoints ────────────────────────────────────────────────────────
+
 @app.get("/health")
 async def health():
     return {
@@ -90,11 +87,26 @@ async def health():
         "environment": os.getenv("APP_ENV", "production"),
     }
 
+
 @app.get("/")
 async def root():
     return {"service": "hardened-microservice", "version": "3.0.0"}
 
+
+def _process_identity():
+    uid = os.getuid() if hasattr(os, "getuid") else int(os.getenv("APP_UID", "1000"))
+    gid = os.getgid() if hasattr(os, "getgid") else int(os.getenv("APP_GID", "1000"))
+    user = os.getenv("USER") or os.getenv("USERNAME") or getpass.getuser()
+    return {"uid": uid, "gid": gid, "user": user}
+
+
 @app.get("/security/identity")
 async def identity():
     """Return process UID/GID for the Identity Monitor card."""
-    return {"uid": os.getuid(), "gid": os.getgid(), "user": os.getenv("USER", "unknown")}
+    return _process_identity()
+
+
+@app.get("/identity")
+async def identity_alias():
+    """Backward-compatible identity endpoint for older dashboard builds."""
+    return _process_identity()

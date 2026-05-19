@@ -130,7 +130,7 @@ jobs:
             --set image.tag=${{ github.sha }} `
             --set dashboard.image.repository=my-dashboard `
             --set dashboard.image.tag=${{ github.sha }} `
-            --wait --timeout=120s
+            --wait --timeout=300s --atomic
 
       - name: Verify deployment
         run: |

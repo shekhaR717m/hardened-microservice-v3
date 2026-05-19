@@ -46,13 +46,22 @@ jobs:
         run: docker build -t my-app:${{ github.sha }} .
 
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: my-app:${{ github.sha }}
-          format: table
-          exit-code: 1
-          severity: CRITICAL
-          ignore-unfixed: true
+        run: |
+          $imageTar = Join-Path $env:RUNNER_TEMP "my-app-${{ github.sha }}.tar"
+          $trivyWorkDir = (Resolve-Path $env:RUNNER_TEMP).Path -replace '\\', '/'
+          $trivyInput = "/work/$(Split-Path $imageTar -Leaf)"
+
+          docker save my-app:${{ github.sha }} -o $imageTar
+          docker run --rm `
+            -v "${trivyWorkDir}:/work" `
+            aquasec/trivy:0.58.2 image `
+            --input $trivyInput `
+            --format table `
+            --exit-code 1 `
+            --severity CRITICAL `
+            --ignore-unfixed
+
+          Remove-Item -LiteralPath $imageTar -Force
 
   build-dashboard:
     name: Build Dashboard

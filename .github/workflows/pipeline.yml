@@ -99,8 +99,19 @@ jobs:
 
       - name: Import images to K3s
         run: |
-          docker save my-app:${{ github.sha }} | wsl sudo k3s ctr images import -
-          docker save my-dashboard:${{ github.sha }} | wsl sudo k3s ctr images import -
+          $appTar = Join-Path $env:RUNNER_TEMP "my-app-${{ github.sha }}.tar"
+          $dashboardTar = Join-Path $env:RUNNER_TEMP "my-dashboard-${{ github.sha }}.tar"
+
+          docker save my-app:${{ github.sha }} -o $appTar
+          docker save my-dashboard:${{ github.sha }} -o $dashboardTar
+
+          $appTarWsl = (wsl wslpath -a $appTar).Trim()
+          $dashboardTarWsl = (wsl wslpath -a $dashboardTar).Trim()
+
+          wsl sudo k3s ctr images import $appTarWsl
+          wsl sudo k3s ctr images import $dashboardTarWsl
+
+          Remove-Item -LiteralPath $appTar, $dashboardTar -Force
 
       - name: Deploy with Helm
         run: |
